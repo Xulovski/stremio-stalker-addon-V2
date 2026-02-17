@@ -1,10 +1,13 @@
 {
   "name": "stremio-stalker-addon-v2",
   "version": "1.0.0",
-  "description": "Stremio addon para portais Stalker/MAG (MAC)",
+  "description": "Stremio addon para portais Stalker/MAG",
   "main": "server.cjs",
   "scripts": {
     "start": "node server.cjs"
+  },
+}
+
   },
   "dependencies": {
     "express": "^4.22.1",
