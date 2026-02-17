@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Pasta de cache (igual ao teu python)
+// Pasta de cache
 const CACHE_DIR = path.join(__dirname, 'cache');
 if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
 
@@ -27,9 +27,9 @@ function getSessionKey(config) {
     return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
 }
 
-// Função para gerar/atualizar o M3U via python (chama stalker_engine.py)
 function generateStalkerM3U(config, sessionKey) {
     return new Promise((resolve, reject) => {
+        console.log(`[PYTHON] Iniciando geração para session ${sessionKey}`);
         const py = spawn('python3', [
             path.join(__dirname, 'python/stalker_engine.py'),
             sessionKey,
@@ -46,20 +46,19 @@ function generateStalkerM3U(config, sessionKey) {
 
         py.on('close', (code) => {
             if (code !== 0) {
-                console.error(`Python erro: ${error}`);
+                console.error(`[PYTHON ERROR] Código ${code}: ${error}`);
                 return reject(new Error('Falha ao gerar M3U via Python'));
             }
-            console.log(`Python gerou M3U para session ${sessionKey}`);
+            console.log(`[PYTHON] Sucesso para session ${sessionKey}`);
             resolve();
         });
     });
 }
 
-// Lê o M3U gerado e converte para metas Stremio
 function getChannelsFromM3U(sessionKey) {
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
     if (!fs.existsSync(m3uPath)) {
-        console.log('[DEBUG] M3U não encontrado:', m3uPath);
+        console.log('[M3U] Ficheiro não encontrado:', m3uPath);
         return [];
     }
 
@@ -67,7 +66,6 @@ function getChannelsFromM3U(sessionKey) {
     const lines = content.split('\n');
     const metas = [];
     let currentName = '';
-    let currentCmd = '';
 
     for (const line of lines) {
         const trimmed = line.trim();
@@ -75,62 +73,45 @@ function getChannelsFromM3U(sessionKey) {
             const match = trimmed.match(/,(.+)/);
             currentName = match ? match[1].trim() : 'Canal Desconhecido';
         } else if (trimmed && !trimmed.startsWith('#') && currentName) {
-            currentCmd = trimmed;
             const id = `channel_${currentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
             metas.push({
                 id,
                 type: 'tv',
                 name: currentName,
-                poster: 'https://via.placeholder.com/300x450/222/fff?text=' + encodeURIComponent(currentName.substring(0, 15)),   
+                poster: 'https://via.placeholder.com/300x450/222/fff?text=' + encodeURIComponent(currentName.substring(0, 15)),
                 description: 'Canal IPTV via Stalker',
                 genres: ['IPTV'],
-                // Adiciona runtime para evitar problemas de loading
                 runtime: 'N/A'
             });
-            console.log('[DEBUG] Canal adicionado:', currentName, 'ID:', id, 'Cmd:', currentCmd);
             currentName = '';
         }
     }
 
-    console.log('[DEBUG] Total canais encontrados:', metas.length);
-
+    console.log('[M3U] Total canais parseados:', metas.length);
     return metas;
 }
 
-// Catalog Handler - lista os canais
 async function catalogHandler({ type, id, extra, config }) {
     console.log('[CATALOG] Config recebida:', config);
     const sessionKey = getSessionKey(config);
-    console.log('[CATALOG] Session key gerado:', sessionKey);
+    console.log('[CATALOG] Session key:', sessionKey);
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
     console.log('[CATALOG] Procurando M3U em:', m3uPath);
 
-    // Se não existir ou estiver vazio → gera via python
     if (!fs.existsSync(m3uPath) || fs.statSync(m3uPath).size < 100) {
         try {
-            console.log('[CATALOG] M3U não encontrado ou vazio → a gerar via Python...');
             await generateStalkerM3U(config, sessionKey);
-            console.log('[CATALOG] Geração Python concluída');
         } catch (err) {
-            console.error('[CATALOG ERROR] Falha ao gerar M3U:', err.message);
-            return { metas: [], error: 'Falha ao carregar canais do portal' };
+            console.error('[CATALOG ERROR]', err.message);
+            return { metas: [], error: 'Falha ao gerar canais' };
         }
     }
 
-    // Agora lê os canais do M3U gerado
     const metas = getChannelsFromM3U(sessionKey);
-
-    console.log('[CATALOG] Total de canais encontrados:', metas.length);
-    if (metas.length === 0) {
-        console.warn('[CATALOG] Nenhum canal encontrado no M3U');
-    }
-
+    console.log('[CATALOG] Canais encontrados:', metas.length);
     return { metas };
 }
 
-
-
-// Stream Handler - devolve o link direto do M3U
 async function streamHandler({ type, id, config }) {
     if (type !== 'tv') return { streams: [] };
 
@@ -170,7 +151,6 @@ async function streamHandler({ type, id, config }) {
     };
 }
 
-// Meta Handler (opcional - info básica do canal)
 async function metaHandler({ type, id, config }) {
     if (type !== 'tv') return { meta: null };
 
@@ -181,7 +161,6 @@ async function metaHandler({ type, id, config }) {
     return { meta: meta || null };
 }
 
-// Manifest
 const manifest = {
     id: "org.xulovski.stalker-iptv",
     version: "1.0.2",
@@ -197,7 +176,7 @@ const manifest = {
     }],
     behaviorHints: {
         configurable: true,
-        configurationURL: "http://localhost:3000/configure",
+        configurationURL: "https://teu-render-url.onrender.com/configure",
         reloadRequired: true
     }
 };
@@ -286,7 +265,7 @@ app.get('/configure', (req, res) => {
         stalker_timezone: tz
       });
 
-      const manifestUrl = 'http://localhost:3000/manifest.json?' + params.toString();
+      const manifestUrl = window.location.origin + '/manifest.json?' + params.toString();
 
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
 
@@ -303,28 +282,27 @@ app.get('/configure', (req, res) => {
     `);
 });
 
-// Rota para o catálogo (Stremio chama /catalog/tv/stalker_catalog.json ou com extra)
+// Rota para o catálogo
 app.get('/catalog/:type/:id/:extra?.json', async (req, res) => {
     const { type, id, extra } = req.params;
     const config = req.query;
 
     console.log('[ROTA CATALOG] Chamado com:', { type, id, extra, config });
 
-        let extraObj = {};
-        if (extra) {
-                     const decoded = decodeURIComponent(extra);
-              if (decoded.startsWith('{')) {
-        try {
-            extraObj = JSON.parse(decoded);
-        } catch (e) {
-            console.warn('[EXTRA PARSE] Falha em JSON.parse:', e);
+    let extraObj = {};
+    if (extra) {
+        const decoded = decodeURIComponent(extra);
+        if (decoded.startsWith('{')) {
+            try {
+                extraObj = JSON.parse(decoded);
+            } catch (e) {
+                console.warn('[EXTRA] Falha JSON.parse:', e);
+            }
+        } else {
+            const params = new URLSearchParams(decoded);
+            extraObj = Object.fromEntries(params);
         }
-    } else {
-        // Trata como query string simples (ex: genre=Todos&skip=10)
-        const params = new URLSearchParams(decoded);
-        extraObj = Object.fromEntries(params);
     }
-}
 
     try {
         const result = await catalogHandler({ type, id, extra: extraObj, config });
@@ -335,13 +313,11 @@ app.get('/catalog/:type/:id/:extra?.json', async (req, res) => {
     }
 });
 
-// Inicia o servidor (esta linha estava a faltar no código que mostraste)
+// Inicia o servidor
 const port = process.env.PORT || 3000;
-
 app.listen(port, '0.0.0.0', () => {
-    console.log(`Addon rodando em http://0.0.0.0:${port} (acessível em toda a rede)`);
+    console.log(`Addon rodando em http://0.0.0.0:${port}`);
 });
-
 
 
 
