@@ -1,0 +1,29 @@
+#EXTM3U
+#EXTINF:-1,RTP 1
+ffmpeg http://localhost/ch/35545_
+#EXTINF:-1,RTP 1 HD
+ffmpeg http://localhost/ch/122114_
+#EXTINF:-1,RTP 1 FHD
+ffmpeg http://localhost/ch/1_
+#EXTINF:-1,RTP 2
+ffmpeg http://localhost/ch/178_
+#EXTINF:-1,RTP 2 HD
+ffmpeg http://localhost/ch/3_
+#EXTINF:-1,SIC
+ffmpeg http://localhost/ch/5_
+#EXTINF:-1,SIC HD
+ffmpeg http://localhost/ch/122115_
+#EXTINF:-1,SIC FHD
+ffmpeg http://localhost/ch/4_
+#EXTINF:-1,TVI
+ffmpeg http://localhost/ch/134013_
+#EXTINF:-1,TVI HD
+ffmpeg http://localhost/ch/122113_
+#EXTINF:-1,TVI FHD
+ffmpeg http://localhost/ch/6_
+#EXTINF:-1,SIC NOTICIAS
+ffmpeg http://localhost/ch/10_
+#EXTINF:-1,SIC NOTICIAS HD
+ffmpeg http://localhost/ch/129868_
+#EXTINF:-1,SIC NOTICIAS FHD
+ffmpeg http://localhost/ch/9_
