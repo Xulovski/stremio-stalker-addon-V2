@@ -6,9 +6,6 @@
   "scripts": {
     "start": "node server.cjs"
   },
-}
-
-  },
   "dependencies": {
     "express": "^4.22.1",
     "cors": "^2.8.6",
