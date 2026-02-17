@@ -1,9 +1,8 @@
 {
-  "name": "stremio-stalker-addon",
+  "name": "stremio-stalker-addon-v2",
   "version": "1.0.0",
   "description": "Stremio addon com suporte Stalker IPTV (MAC / MAG)",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "start": "node server.js"
   },
@@ -12,5 +11,8 @@
     "cors": "^2.8.6",
     "express": "^4.22.1",
     "stremio-addon-sdk": "^1.6.10"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
