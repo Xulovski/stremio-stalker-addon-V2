@@ -28,8 +28,7 @@ function getSessionKey(data) {
         stalker_timezone: (data.stalker_timezone || 'Europe/Lisbon').trim()
     };
     const str = JSON.stringify(o, Object.keys(o).sort());
-    return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
-}
+    return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);}
 
 // Gera/atualiza o arquivo M3U chamando o script Python
 function generateStalkerM3U(config, sessionKey) {
