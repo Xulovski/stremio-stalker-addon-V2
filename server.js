@@ -17,11 +17,12 @@ if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-// Função para gerar chave de sessão
+// Função para gerar chave de sessão (agora usa o nome da lista também)
 function getSessionKey(data) {
     console.log('[SESSION DEBUG] Data recebida:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
     const o = {
+        nome_lista: (data.nome_lista || 'default').trim(),
         stalker_portal: data.stalker_portal.trim(),
         stalker_mac: data.stalker_mac.trim().toUpperCase(),
         stalker_timezone: (data.stalker_timezone || 'Europe/Lisbon').trim()
@@ -30,7 +31,7 @@ function getSessionKey(data) {
     return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
 }
 
-// Gera M3U via Python
+// Gera/atualiza o M3U via python
 function generateStalkerM3U(data, sessionKey) {
     return new Promise((resolve, reject) => {
         const py = spawn('python3', [
@@ -58,7 +59,7 @@ function generateStalkerM3U(data, sessionKey) {
     });
 }
 
-// Lê canais do M3U
+// Lê o M3U gerado e converte para metas Stremio
 function getChannelsFromM3U(sessionKey) {
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
     if (!fs.existsSync(m3uPath)) {
@@ -89,7 +90,7 @@ function getChannelsFromM3U(sessionKey) {
                 genres: ['IPTV'],
                 runtime: 'N/A'
             });
-            console.log('[DEBUG] Canal adicionado:', currentName, 'ID:', id);
+            console.log('[DEBUG] Canal adicionado:', currentName, 'ID:', id, 'Cmd:', currentCmd);
             currentName = '';
         }
     }
@@ -101,7 +102,7 @@ function getChannelsFromM3U(sessionKey) {
 // Manifest com configuração nativa
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.4",
+    version: "1.0.5",  // aumente sempre que mudar algo para forçar recarga
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -114,14 +115,21 @@ const manifest = {
     }],
     behaviorHints: {
         configurable: true,
-        configurationRequired: true,
         reloadRequired: true
+        // Sem configurationRequired para evitar abertura externa
     },
     userData: {
+        nome_lista: {
+            type: "text",
+            title: "Nome da Lista",
+            description: "Dê um nome para identificar sua lista (ex: Família, Trabalho)",
+            required: true,
+            default: "Minha Lista IPTV"
+        },
         stalker_portal: {
             type: "text",
-            title: "Portal URL",
-            description: "Ex: http://seu-portal.com:8080/c/",
+            title: "URL do Servidor / Portal",
+            description: "Ex: http://seu-servidor.com:8080/c/",
             required: true
         },
         stalker_mac: {
@@ -129,13 +137,6 @@ const manifest = {
             title: "MAC Address",
             description: "Formato: 00:1A:79:XX:XX:XX",
             required: true
-        },
-        stalker_timezone: {
-            type: "text",
-            title: "Timezone",
-            description: "Ex: Europe/Lisbon",
-            default: "Europe/Lisbon",
-            required: false
         }
     }
 };
@@ -154,7 +155,7 @@ async function catalogHandler(args) {
     const { type, id, extra = {}, config = {}, userData = {} } = args || {};
 
     console.log('[CATALOG DEBUG] Args completo:', JSON.stringify(args, null, 2));
-    console.log('[CATALOG DEBUG] UserData:', JSON.stringify(userData, null, 2));
+    console.log('[CATALOG DEBUG] UserData (config salva):', JSON.stringify(userData, null, 2));
 
     const effectiveData = Object.keys(userData).length > 0 ? userData : config;
 
@@ -168,15 +169,17 @@ async function catalogHandler(args) {
 
     if (!fs.existsSync(m3uPath) || fs.statSync(m3uPath).size < 100) {
         try {
-            console.log('[CATALOG] Gerando M3U via Python...');
+            console.log('[CATALOG] M3U não encontrado ou vazio → a gerar via Python...');
             await generateStalkerM3U(effectiveData, sessionKey);
+            console.log('[CATALOG] Geração Python concluída');
         } catch (err) {
-            console.error('[CATALOG ERROR]', err.message);
-            return { metas: [], error: 'Falha ao gerar M3U' };
+            console.error('[CATALOG ERROR] Falha ao gerar M3U:', err.message);
+            return { metas: [], error: 'Falha ao carregar canais do portal' };
         }
     }
 
     const metas = getChannelsFromM3U(sessionKey);
+    console.log('[CATALOG] Total de canais encontrados:', metas.length);
     return { metas };
 }
 
