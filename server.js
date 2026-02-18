@@ -102,7 +102,7 @@ function getChannelsFromM3U(sessionKey) {
 // Manifest com configuração apontando para /configure custom
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.7",  // aumente para forçar recarga
+    version: "1.0.8",  // aumente para forçar recarga do manifest
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -115,9 +115,9 @@ const manifest = {
     }],
     behaviorHints: {
         configurable: true,
-        configurationRequired: true,  // força abrir config ao instalar
         reloadRequired: true,
-        configurationURL: "/configure"  // aponta para a rota custom
+        configurationURL: "/configure"  // faz a engrenagem abrir o form custom
+        // Sem configurationRequired para permitir botão "Instalar" na tela de confirmação
     }
 };
 
@@ -177,15 +177,17 @@ app.get('/configure', (req, res) => {
         return;
       }
 
-      // Salva a config localmente no browser (para uso futuro se quiser)
-      localStorage.setItem('stalker_config', JSON.stringify({ nome_lista: nome, stalker_portal: portal, stalker_mac: mac }));
+      const params = new URLSearchParams({
+        nome_lista: nome,
+        stalker_portal: portal,
+        stalker_mac: mac
+      });
 
-      // Abre o Stremio com o manifest limpo (instalação ou reload)
-      const manifestUrl = window.location.origin + '/manifest.json';
+      const manifestUrl = window.location.origin + '/manifest.json?' + params.toString();
+
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
 
-      // Mensagem de status
-      document.getElementById('status').innerHTML = 'Stremio aberto! <br>Se não instalou ainda, clique em "Instalar".<br>Depois clique na engrenagem para configurar.';
+      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Se o addon ainda não estiver instalado, clique em "Instalar" na tela que abrir.<br>Após instalar, volte aqui ou clique na engrenagem para ajustar.';
     });
   </script>
 </body>
