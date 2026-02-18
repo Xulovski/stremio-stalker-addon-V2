@@ -17,9 +17,9 @@ if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-// Função para gerar chave de sessão (usa params da query ou userData)
+// Função para gerar chave de sessão
 function getSessionKey(data) {
-    console.log('[SESSION DEBUG] Data usada para session key:', JSON.stringify(data, null, 2));
+    console.log('[SESSION DEBUG] Data usada:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
     const o = {
         nome_lista: (data.nome_lista || 'default').trim(),
@@ -99,10 +99,10 @@ function getChannelsFromM3U(sessionKey) {
     return metas;
 }
 
-// Manifest (sem configurationRequired para permitir instalação direta)
+// Manifest
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.9",  // aumente para forçar recarga
+    version: "1.0.9",
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -116,7 +116,7 @@ const manifest = {
     behaviorHints: {
         configurable: true,
         reloadRequired: true,
-        configurationURL: "/configure"  // abre form custom na engrenagem
+        configurationURL: "/configure"
     }
 };
 
@@ -159,7 +159,7 @@ app.get('/configure', (req, res) => {
     <label>MAC Address</label>
     <input type="text" id="stalker_mac" placeholder="00:1A:79:XX:XX:XX" required pattern="[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}">
 
-    <button type="submit">Salvar e Instalar / Atualizar</button>
+    <button type="submit">Salvar e Abrir Stremio</button>
   </form>
 
   <div id="status"></div>
@@ -186,7 +186,7 @@ app.get('/configure', (req, res) => {
 
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
 
-      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Se o addon ainda não estiver instalado, clique em "Instalar".<br>Após instalar, os canais devem aparecer automaticamente.';
+      document.getElementById('status').innerHTML = 'Stremio aberto! Clique em "Instalar" se necessário. Os canais devem aparecer após recarregar o catálogo.';
     });
   </script>
 </body>
@@ -201,20 +201,24 @@ async function catalogHandler(args) {
     console.log('[CATALOG DEBUG] Args completo:', JSON.stringify(args, null, 2));
     console.log('[CATALOG DEBUG] UserData:', JSON.stringify(userData, null, 2));
 
-    // Fallback: se userData vazio, tenta pegar da query (req.query não está disponível diretamente no handler do SDK, então usamos args se tiver)
     let effectiveData = Object.keys(userData).length > 0 ? userData : config;
 
-    // Se ainda vazio, avisa (o usuário precisa configurar via form)
+    // Fallback para params da query (extra ou args se tiver)
+    if (Object.keys(effectiveData).length === 0 && extra && Object.keys(extra).length > 0) {
+        effectiveData = extra;
+        console.log('[CATALOG] Usando fallback extra como config:', JSON.stringify(extra, null, 2));
+    }
+
     if (Object.keys(effectiveData).length === 0) {
-        console.warn('[CATALOG] Nenhuma configuração encontrada - use /configure para configurar');
+        console.warn('[CATALOG] Nenhuma configuração encontrada - configure via /configure');
         return { metas: [{ 
             id: 'config-required',
             type: 'tv',
-            name: 'Configure o addon primeiro',
-            description: 'Clique na engrenagem ou acesse /configure no browser para adicionar portal e MAC',
-            poster: 'https://via.placeholder.com/300x450/444/fff?text=Configurar',
+            name: 'Configure o addon para ver os canais',
+            description: 'Acesse /configure no browser ou clique na engrenagem para adicionar portal e MAC. Depois recarregue o catálogo.',
+            poster: 'https://via.placeholder.com/300x450/444/fff?text=Configurar+Agora',
             genres: ['Ação']
-        }] }; // Mostra mensagem no catálogo
+        }] };
     }
 
     const sessionKey = getSessionKey(effectiveData);
@@ -236,7 +240,7 @@ async function catalogHandler(args) {
     return { metas };
 }
 
-// Stream Handler (similar fallback)
+// Stream Handler
 async function streamHandler(args) {
     const { type, id, config = {}, userData = {} } = args || {};
 
