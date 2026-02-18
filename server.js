@@ -130,7 +130,7 @@ const addonInterface = builder.getInterface();
 const addonRouter = getRouter(addonInterface);
 app.use(addonRouter);
 
-// Rota custom /configure (abre no browser com form bonito)
+// Rota custom /configure (form bonito no browser)
 app.get('/configure', (req, res) => {
     res.send(`
 <!DOCTYPE html>
@@ -143,8 +143,9 @@ app.get('/configure', (req, res) => {
     h1 { text-align: center; color: #333; }
     label { display: block; margin: 15px 0 5px; font-weight: bold; }
     input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-top: 10px; }
     button:hover { background: #0056b3; }
+    #status { margin-top: 20px; text-align: center; color: #555; }
   </style>
 </head>
 <body>
@@ -159,8 +160,10 @@ app.get('/configure', (req, res) => {
     <label>MAC Address</label>
     <input type="text" id="stalker_mac" placeholder="00:1A:79:XX:XX:XX" required pattern="[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}">
 
-    <button type="submit">Salvar e Instalar</button>
+    <button type="submit">Salvar Configuração e Abrir Stremio</button>
   </form>
+
+  <div id="status"></div>
 
   <script>
     document.getElementById('form').addEventListener('submit', function(e) {
@@ -174,15 +177,15 @@ app.get('/configure', (req, res) => {
         return;
       }
 
-      const params = new URLSearchParams({
-        nome_lista: nome,
-        stalker_portal: portal,
-        stalker_mac: mac
-      });
+      // Salva a config localmente no browser (para uso futuro se quiser)
+      localStorage.setItem('stalker_config', JSON.stringify({ nome_lista: nome, stalker_portal: portal, stalker_mac: mac }));
 
-      const manifestUrl = window.location.origin + '/manifest.json?' + params.toString();
-
+      // Abre o Stremio com o manifest limpo (instalação ou reload)
+      const manifestUrl = window.location.origin + '/manifest.json';
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
+
+      // Mensagem de status
+      document.getElementById('status').innerHTML = 'Stremio aberto! <br>Se não instalou ainda, clique em "Instalar".<br>Depois clique na engrenagem para configurar.';
     });
   </script>
 </body>
