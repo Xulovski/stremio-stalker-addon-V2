@@ -17,9 +17,9 @@ if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-// Função para gerar chave de sessão (inclui nome da lista)
+// Função para gerar chave de sessão (usa nome da lista também)
 function getSessionKey(data) {
-    console.log('[SESSION DEBUG] Data recebida:', JSON.stringify(data, null, 2));
+    console.log('[SESSION DEBUG] Data recebida para session key:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
     const o = {
         nome_lista: (data.nome_lista || 'default').trim(),
@@ -99,10 +99,10 @@ function getChannelsFromM3U(sessionKey) {
     return metas;
 }
 
-// Manifest com configuração apontando para /configure custom
+// Manifest
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.8",  // aumente para forçar recarga do manifest
+    version: "1.0.8",  // aumente para forçar recarga
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -116,8 +116,7 @@ const manifest = {
     behaviorHints: {
         configurable: true,
         reloadRequired: true,
-        configurationURL: "/configure"  // faz a engrenagem abrir o form custom
-        // Sem configurationRequired para permitir botão "Instalar" na tela de confirmação
+        configurationURL: "/configure"  // abre o form custom na engrenagem
     }
 };
 
@@ -187,7 +186,7 @@ app.get('/configure', (req, res) => {
 
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
 
-      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Se o addon ainda não estiver instalado, clique em "Instalar" na tela que abrir.<br>Após instalar, volte aqui ou clique na engrenagem para ajustar.';
+      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Se o addon ainda não estiver instalado, clique em "Instalar".<br>Após instalar, volte aqui ou clique na engrenagem para ajustar.';
     });
   </script>
 </body>
