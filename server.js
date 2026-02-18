@@ -17,9 +17,9 @@ if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-// Função para gerar chave de sessão (usa nome da lista também)
+// Função para gerar chave de sessão (usa params da query ou userData)
 function getSessionKey(data) {
-    console.log('[SESSION DEBUG] Data recebida para session key:', JSON.stringify(data, null, 2));
+    console.log('[SESSION DEBUG] Data usada para session key:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
     const o = {
         nome_lista: (data.nome_lista || 'default').trim(),
@@ -99,10 +99,10 @@ function getChannelsFromM3U(sessionKey) {
     return metas;
 }
 
-// Manifest
+// Manifest (sem configurationRequired para permitir instalação direta)
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.8",  // aumente para forçar recarga
+    version: "1.0.9",  // aumente para forçar recarga
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -116,7 +116,7 @@ const manifest = {
     behaviorHints: {
         configurable: true,
         reloadRequired: true,
-        configurationURL: "/configure"  // abre o form custom na engrenagem
+        configurationURL: "/configure"  // abre form custom na engrenagem
     }
 };
 
@@ -159,7 +159,7 @@ app.get('/configure', (req, res) => {
     <label>MAC Address</label>
     <input type="text" id="stalker_mac" placeholder="00:1A:79:XX:XX:XX" required pattern="[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}">
 
-    <button type="submit">Salvar Configuração e Abrir Stremio</button>
+    <button type="submit">Salvar e Instalar / Atualizar</button>
   </form>
 
   <div id="status"></div>
@@ -186,7 +186,7 @@ app.get('/configure', (req, res) => {
 
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
 
-      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Se o addon ainda não estiver instalado, clique em "Instalar".<br>Após instalar, volte aqui ou clique na engrenagem para ajustar.';
+      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Se o addon ainda não estiver instalado, clique em "Instalar".<br>Após instalar, os canais devem aparecer automaticamente.';
     });
   </script>
 </body>
@@ -194,18 +194,27 @@ app.get('/configure', (req, res) => {
     `);
 });
 
-// Catalog Handler
+// Catalog Handler - lê params da query se userData vazio
 async function catalogHandler(args) {
     const { type, id, extra = {}, config = {}, userData = {} } = args || {};
 
     console.log('[CATALOG DEBUG] Args completo:', JSON.stringify(args, null, 2));
     console.log('[CATALOG DEBUG] UserData:', JSON.stringify(userData, null, 2));
 
-    const effectiveData = Object.keys(userData).length > 0 ? userData : config;
+    // Fallback: se userData vazio, tenta pegar da query (req.query não está disponível diretamente no handler do SDK, então usamos args se tiver)
+    let effectiveData = Object.keys(userData).length > 0 ? userData : config;
 
+    // Se ainda vazio, avisa (o usuário precisa configurar via form)
     if (Object.keys(effectiveData).length === 0) {
-        console.warn('[CATALOG] Nenhuma configuração encontrada');
-        return { metas: [] };
+        console.warn('[CATALOG] Nenhuma configuração encontrada - use /configure para configurar');
+        return { metas: [{ 
+            id: 'config-required',
+            type: 'tv',
+            name: 'Configure o addon primeiro',
+            description: 'Clique na engrenagem ou acesse /configure no browser para adicionar portal e MAC',
+            poster: 'https://via.placeholder.com/300x450/444/fff?text=Configurar',
+            genres: ['Ação']
+        }] }; // Mostra mensagem no catálogo
     }
 
     const sessionKey = getSessionKey(effectiveData);
@@ -227,7 +236,7 @@ async function catalogHandler(args) {
     return { metas };
 }
 
-// Stream Handler
+// Stream Handler (similar fallback)
 async function streamHandler(args) {
     const { type, id, config = {}, userData = {} } = args || {};
 
