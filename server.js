@@ -18,8 +18,10 @@ if (!fs.existsSync(CACHE_DIR)) {
 }
 
 // Função para gerar chave de sessão baseada na configuração
-function getSessionKey(data) {  // ← pode chamar de data em vez de config
+function getSessionKey(data) {
+    console.log('[SESSION DEBUG] Data recebida para session key:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
+}
     const o = {
         stalker_portal: data.stalker_portal.trim(),
         stalker_mac: data.stalker_mac.trim().toUpperCase(),
@@ -99,8 +101,12 @@ function getChannelsFromM3U(sessionKey) {
 
 // HANDLERS (devem vir ANTES do builder!)
 async function catalogHandler(args) {
-    const { type, id, extra, config = {}, userData = {} } = args;
+    console.log('[CATALOG DEBUG] Tipo de args:', typeof args, 'Chaves de args:', Object.keys(args));
 
+    const { type, id, extra = {}, config = {}, userData = {} } = args || {};
+
+    console.log('[CATALOG DEBUG] Args completo:', JSON.stringify(args, null, 2));
+}
     console.log('[CATALOG DEBUG] Args completo recebido:', JSON.stringify(args, null, 2));
     console.log('[CATALOG DEBUG] Config (se vier):', JSON.stringify(config, null, 2));
     console.log('[CATALOG DEBUG] UserData (esperado):', JSON.stringify(userData, null, 2));
@@ -213,7 +219,7 @@ async function metaHandler(args) {
 // Manifest (sem configurationURL fixo – o SDK gerencia dinamicamente se necessário)
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.3",  // aumente a versão para forçar reload no Stremio
+    version: "1.0.4", // aumente sempre para forçar o Stremio a recarregar
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -226,34 +232,31 @@ const manifest = {
     }],
     behaviorHints: {
         configurable: true,
+        configurationRequired: true, // ← adiciona isso para forçar tela de config antes de instalar
         reloadRequired: true
     },
-    userData: [  // ← aqui é userData (não config)
-        {
-            key: "stalker_portal",
+    userData: {  // ← formato objeto (chave: config field)
+        stalker_portal: {
             type: "text",
             title: "Portal URL",
             description: "Ex: http://seu-portal.com:8080/c/",
             required: true
         },
-        {
-            key: "stalker_mac",
+        stalker_mac: {
             type: "text",
             title: "MAC Address",
             description: "Formato: 00:1A:79:XX:XX:XX",
             required: true
         },
-        {
-            key: "stalker_timezone",
+        stalker_timezone: {
             type: "text",
             title: "Timezone",
             description: "Ex: Europe/Lisbon",
             default: "Europe/Lisbon",
             required: false
         }
-    ]
+    }
 };
-
 
 const builder = new addonBuilder(manifest);
 builder.defineCatalogHandler(catalogHandler);
