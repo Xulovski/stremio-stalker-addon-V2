@@ -17,7 +17,7 @@ if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-// Função para gerar chave de sessão (agora usa o nome da lista também)
+// Função para gerar chave de sessão (inclui nome da lista)
 function getSessionKey(data) {
     console.log('[SESSION DEBUG] Data recebida:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
@@ -102,7 +102,7 @@ function getChannelsFromM3U(sessionKey) {
 // Manifest com configuração nativa
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.5",  // aumente sempre que mudar algo para forçar recarga
+    version: "1.0.6",  // aumente para forçar recarga do manifest
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -116,7 +116,7 @@ const manifest = {
     behaviorHints: {
         configurable: true,
         reloadRequired: true
-        // Sem configurationRequired para evitar abertura externa
+        // Sem configurationRequired para evitar abertura externa forçada
     },
     userData: {
         nome_lista: {
