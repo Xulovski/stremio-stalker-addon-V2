@@ -18,12 +18,12 @@ if (!fs.existsSync(CACHE_DIR)) {
 }
 
 // Função para gerar chave de sessão baseada na configuração
-function getSessionKey(config) {
-    if (!config || !config.stalker_portal || !config.stalker_mac) return '_default';
+function getSessionKey(data) {  // ← pode chamar de data em vez de config
+    if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
     const o = {
-        stalker_portal: config.stalker_portal.trim(),
-        stalker_mac: config.stalker_mac.trim().toUpperCase(),
-        stalker_timezone: (config.stalker_timezone || 'Europe/Lisbon').trim()
+        stalker_portal: data.stalker_portal.trim(),
+        stalker_mac: data.stalker_mac.trim().toUpperCase(),
+        stalker_timezone: (data.stalker_timezone || 'Europe/Lisbon').trim()
     };
     const str = JSON.stringify(o, Object.keys(o).sort());
     return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
@@ -98,16 +98,29 @@ function getChannelsFromM3U(sessionKey) {
 }
 
 // HANDLERS (devem vir ANTES do builder!)
-async function catalogHandler({ type, id, extra, config }) {
-    console.log('[CATALOG] Config recebida:', config);
-    const sessionKey = getSessionKey(config);
+async function catalogHandler(args) {
+    const { type, id, extra, config = {}, userData = {} } = args;
+
+    console.log('[CATALOG DEBUG] Args completo recebido:', JSON.stringify(args, null, 2));
+    console.log('[CATALOG DEBUG] Config (se vier):', JSON.stringify(config, null, 2));
+    console.log('[CATALOG DEBUG] UserData (esperado):', JSON.stringify(userData, null, 2));
+
+    // Usa userData primeiro, fallback para config (compatibilidade)
+    const effectiveData = Object.keys(userData).length > 0 ? userData : config;
+
+    if (Object.keys(effectiveData).length === 0) {
+        console.warn('[CATALOG] Nenhuma configuração encontrada');
+        return { metas: [] };
+    }
+
+    const sessionKey = getSessionKey(effectiveData);
     console.log('[CATALOG] Session key gerado:', sessionKey);
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
 
     if (!fs.existsSync(m3uPath) || fs.statSync(m3uPath).size < 100) {
         try {
             console.log('[CATALOG] M3U não encontrado ou vazio → a gerar via Python...');
-            await generateStalkerM3U(config, sessionKey);
+            await generateStalkerM3U(effectiveData, sessionKey);
             console.log('[CATALOG] Geração Python concluída');
         } catch (err) {
             console.error('[CATALOG ERROR] Falha ao gerar M3U:', err.message);
@@ -123,13 +136,28 @@ async function catalogHandler({ type, id, extra, config }) {
     return { metas };
 }
 
-async function streamHandler({ type, id, config }) {
+async function streamHandler(args) {
+    const { type, id, config = {}, userData = {} } = args;
+
+    console.log('[STREAM DEBUG] Args completo recebido:', JSON.stringify(args, null, 2));
+    console.log('[STREAM DEBUG] Config (se vier):', JSON.stringify(config, null, 2));
+    console.log('[STREAM DEBUG] UserData (esperado):', JSON.stringify(userData, null, 2));
+
+    // Usa userData primeiro, fallback para config
+    const effectiveData = Object.keys(userData).length > 0 ? userData : config;
+
     if (type !== 'tv') return { streams: [] };
 
-    const sessionKey = getSessionKey(config);
+    if (Object.keys(effectiveData).length === 0) {
+        console.warn('[STREAM] Nenhuma configuração encontrada');
+        return { streams: [] };
+    }
+
+    const sessionKey = getSessionKey(effectiveData);
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
 
     if (!fs.existsSync(m3uPath)) return { streams: [] };
+
     const content = fs.readFileSync(m3uPath, 'utf8');
     const lines = content.split('\n');
     let foundUrl = '';
@@ -150,6 +178,7 @@ async function streamHandler({ type, id, config }) {
     }
 
     if (!foundUrl) return { streams: [] };
+
     return {
         streams: [{
             url: foundUrl,
@@ -159,10 +188,22 @@ async function streamHandler({ type, id, config }) {
     };
 }
 
-async function metaHandler({ type, id, config }) {
+async function metaHandler(args) {
+    const { type, id, config = {}, userData = {} } = args;
+
+    console.log('[META DEBUG] Args completo recebido:', JSON.stringify(args, null, 2));
+    console.log('[META DEBUG] UserData:', JSON.stringify(userData, null, 2));
+
+    const effectiveData = Object.keys(userData).length > 0 ? userData : config;
+
     if (type !== 'tv') return { meta: null };
 
-    const sessionKey = getSessionKey(config);
+    if (Object.keys(effectiveData).length === 0) {
+        console.warn('[META] Nenhuma configuração encontrada');
+        return { meta: null };
+    }
+
+    const sessionKey = getSessionKey(effectiveData);
     const metas = getChannelsFromM3U(sessionKey);
     const meta = metas.find(m => m.id === id);
 
@@ -172,7 +213,7 @@ async function metaHandler({ type, id, config }) {
 // Manifest (sem configurationURL fixo – o SDK gerencia dinamicamente se necessário)
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.3",  // mude para forçar reload
+    version: "1.0.3",  // aumente a versão para forçar reload no Stremio
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -184,11 +225,10 @@ const manifest = {
         extra: [{ name: "genre", isRequired: false, options: ["Todos"] }]
     }],
     behaviorHints: {
-        configurable: true,  // ativa config nativa
+        configurable: true,
         reloadRequired: true
     },
-    // Defina os campos de configuração aqui!
-    config: [
+    userData: [  // ← aqui é userData (não config)
         {
             key: "stalker_portal",
             type: "text",
@@ -213,6 +253,7 @@ const manifest = {
         }
     ]
 };
+
 
 const builder = new addonBuilder(manifest);
 builder.defineCatalogHandler(catalogHandler);
