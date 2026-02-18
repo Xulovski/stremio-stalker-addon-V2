@@ -99,10 +99,10 @@ function getChannelsFromM3U(sessionKey) {
     return metas;
 }
 
-// Manifest com configuração nativa
+// Manifest com configuração apontando para /configure custom
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.6",  // aumente para forçar recarga do manifest
+    version: "1.0.7",  // aumente para forçar recarga
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -115,29 +115,9 @@ const manifest = {
     }],
     behaviorHints: {
         configurable: true,
-        reloadRequired: true
-        // Sem configurationRequired para evitar abertura externa forçada
-    },
-    userData: {
-        nome_lista: {
-            type: "text",
-            title: "Nome da Lista",
-            description: "Dê um nome para identificar sua lista (ex: Família, Trabalho)",
-            required: true,
-            default: "Minha Lista IPTV"
-        },
-        stalker_portal: {
-            type: "text",
-            title: "URL do Servidor / Portal",
-            description: "Ex: http://seu-servidor.com:8080/c/",
-            required: true
-        },
-        stalker_mac: {
-            type: "text",
-            title: "MAC Address",
-            description: "Formato: 00:1A:79:XX:XX:XX",
-            required: true
-        }
+        configurationRequired: true,  // força abrir config ao instalar
+        reloadRequired: true,
+        configurationURL: "/configure"  // aponta para a rota custom
     }
 };
 
@@ -150,12 +130,72 @@ const addonInterface = builder.getInterface();
 const addonRouter = getRouter(addonInterface);
 app.use(addonRouter);
 
+// Rota custom /configure (abre no browser com form bonito)
+app.get('/configure', (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <title>Configurar Stalker IPTV</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; background: #f4f4f4; }
+    h1 { text-align: center; color: #333; }
+    label { display: block; margin: 15px 0 5px; font-weight: bold; }
+    input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+  </style>
+</head>
+<body>
+  <h1>Configurar Stalker IPTV</h1>
+  <form id="form">
+    <label>Nome da Lista</label>
+    <input type="text" id="nome_lista" placeholder="Ex: Minha Lista Família" required value="Minha Lista IPTV">
+
+    <label>URL do Servidor / Portal</label>
+    <input type="text" id="stalker_portal" placeholder="http://seu-servidor.com:8080/c/" required>
+
+    <label>MAC Address</label>
+    <input type="text" id="stalker_mac" placeholder="00:1A:79:XX:XX:XX" required pattern="[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}">
+
+    <button type="submit">Salvar e Instalar</button>
+  </form>
+
+  <script>
+    document.getElementById('form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const nome = document.getElementById('nome_lista').value.trim() || 'Minha Lista';
+      const portal = document.getElementById('stalker_portal').value.trim();
+      const mac = document.getElementById('stalker_mac').value.trim().toUpperCase();
+
+      if (!portal || !mac) {
+        alert('Preencha URL do servidor e MAC!');
+        return;
+      }
+
+      const params = new URLSearchParams({
+        nome_lista: nome,
+        stalker_portal: portal,
+        stalker_mac: mac
+      });
+
+      const manifestUrl = window.location.origin + '/manifest.json?' + params.toString();
+
+      window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
+    });
+  </script>
+</body>
+</html>
+    `);
+});
+
 // Catalog Handler
 async function catalogHandler(args) {
     const { type, id, extra = {}, config = {}, userData = {} } = args || {};
 
     console.log('[CATALOG DEBUG] Args completo:', JSON.stringify(args, null, 2));
-    console.log('[CATALOG DEBUG] UserData (config salva):', JSON.stringify(userData, null, 2));
+    console.log('[CATALOG DEBUG] UserData:', JSON.stringify(userData, null, 2));
 
     const effectiveData = Object.keys(userData).length > 0 ? userData : config;
 
