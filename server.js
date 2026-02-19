@@ -19,7 +19,7 @@ if (!fs.existsSync(CACHE_DIR)) {
 
 // Função para gerar chave de sessão
 function getSessionKey(data) {
-    console.log('[SESSION DEBUG] Data usada:', JSON.stringify(data, null, 2));
+    console.log('[SESSION DEBUG] Dados usados:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
     const o = {
         nome_lista: (data.nome_lista || 'default').trim(),
@@ -102,7 +102,7 @@ function getChannelsFromM3U(sessionKey) {
 // Manifest
 const manifest = {
     id: "org.xulovski.stalker-iptv",
-    version: "1.0.9",
+    version: "1.0.10",
     name: "Stalker IPTV (MAC)",
     description: "Canais IPTV via portal Stalker/MAG",
     resources: ["catalog", "stream", "meta"],
@@ -186,7 +186,7 @@ app.get('/configure', (req, res) => {
 
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
 
-      document.getElementById('status').innerHTML = 'Stremio aberto! Clique em "Instalar" se necessário. Os canais devem aparecer após recarregar o catálogo.';
+      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Clique em "Instalar" se necessário.<br>Após instalar, recarregue o catálogo para ver os canais.';
     });
   </script>
 </body>
@@ -200,10 +200,11 @@ async function catalogHandler(args) {
 
     console.log('[CATALOG DEBUG] Args completo:', JSON.stringify(args, null, 2));
     console.log('[CATALOG DEBUG] UserData:', JSON.stringify(userData, null, 2));
+    console.log('[CATALOG DEBUG] Extra (fallback):', JSON.stringify(extra, null, 2));
 
     let effectiveData = Object.keys(userData).length > 0 ? userData : config;
 
-    // Fallback para params da query (extra ou args se tiver)
+    // Fallback para extra (params da query chegam aqui em alguns casos)
     if (Object.keys(effectiveData).length === 0 && extra && Object.keys(extra).length > 0) {
         effectiveData = extra;
         console.log('[CATALOG] Usando fallback extra como config:', JSON.stringify(extra, null, 2));
@@ -215,7 +216,7 @@ async function catalogHandler(args) {
             id: 'config-required',
             type: 'tv',
             name: 'Configure o addon para ver os canais',
-            description: 'Acesse /configure no browser ou clique na engrenagem para adicionar portal e MAC. Depois recarregue o catálogo.',
+            description: 'Acesse /configure no browser para adicionar portal e MAC. Depois recarregue o catálogo.',
             poster: 'https://via.placeholder.com/300x450/444/fff?text=Configurar+Agora',
             genres: ['Ação']
         }] };
@@ -236,7 +237,6 @@ async function catalogHandler(args) {
     }
 
     const metas = getChannelsFromM3U(sessionKey);
-    console.log('[DEBUG] Canais gerados no M3U:', metas.map(m => m.name).join(', '));
     console.log('[CATALOG] Total de canais encontrados:', metas.length);
     return { metas };
 }
