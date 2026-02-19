@@ -22,4 +22,4 @@ EXPOSE 7000
 ENV NODE_ENV=production \
     PORT=7000
 
-CMD ["node", "server.js"]
+CMD ["node", "server.cjs"]
