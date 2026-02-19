@@ -11,27 +11,48 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Pasta de cache
+/* =========================
+   CACHE
+========================= */
+
 const CACHE_DIR = path.join(__dirname, 'cache');
 if (!fs.existsSync(CACHE_DIR)) {
     fs.mkdirSync(CACHE_DIR, { recursive: true });
 }
 
-// Função para gerar chave de sessão
+/* =========================
+   FUNÇÕES AUXILIARES
+========================= */
+
+// ID ÚNICO E CONSISTENTE PARA CANAIS
+function makeChannelId(name) {
+    return 'channel_' + name
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9]/g, '_')
+        .replace(/_+/g, '_')
+        .toLowerCase();
+}
+
+// SESSION KEY
 function getSessionKey(data) {
-    console.log('[SESSION DEBUG] Dados usados:', JSON.stringify(data, null, 2));
     if (!data || !data.stalker_portal || !data.stalker_mac) return '_default';
+
     const o = {
         nome_lista: (data.nome_lista || 'default').trim(),
         stalker_portal: data.stalker_portal.trim(),
         stalker_mac: data.stalker_mac.trim().toUpperCase(),
         stalker_timezone: (data.stalker_timezone || 'Europe/Lisbon').trim()
     };
+
     const str = JSON.stringify(o, Object.keys(o).sort());
     return crypto.createHash('sha256').update(str).digest('hex').slice(0, 16);
 }
 
-// Gera/atualiza o M3U via python
+/* =========================
+   PYTHON → GERAR M3U
+========================= */
+
 function generateStalkerM3U(data, sessionKey) {
     return new Promise((resolve, reject) => {
         const py = spawn('python3', [
@@ -42,81 +63,74 @@ function generateStalkerM3U(data, sessionKey) {
             data.stalker_timezone || 'Europe/Lisbon'
         ]);
 
-        let output = '';
         let error = '';
 
-        py.stdout.on('data', (data) => { output += data.toString(); });
-        py.stderr.on('data', (data) => { error += data.toString(); });
+        py.stderr.on('data', d => error += d.toString());
 
-        py.on('close', (code) => {
+        py.on('close', code => {
             if (code !== 0) {
-                console.error(`Python erro: ${error}`);
-                return reject(new Error('Falha ao gerar M3U via Python'));
+                console.error('[PYTHON ERROR]', error);
+                reject(new Error('Falha ao gerar M3U'));
+            } else {
+                resolve();
             }
-            console.log(`Python gerou M3U para session ${sessionKey}`);
-            resolve();
         });
     });
 }
 
-// Lê o M3U gerado e converte para metas Stremio
+/* =========================
+   LER M3U → METAS
+========================= */
+
 function getChannelsFromM3U(sessionKey) {
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
-    if (!fs.existsSync(m3uPath)) {
-        console.log('[DEBUG] M3U não encontrado:', m3uPath);
-        return [];
-    }
+    if (!fs.existsSync(m3uPath)) return [];
 
-    const content = fs.readFileSync(m3uPath, 'utf8');
-    const lines = content.split('\n');
+    const lines = fs.readFileSync(m3uPath, 'utf8').split('\n');
     const metas = [];
+
     let currentName = '';
-    let currentCmd = '';
 
     for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('#EXTINF')) {
-            const match = trimmed.match(/,(.+)/);
-            currentName = match ? match[1].trim() : 'Canal Desconhecido';
-        } else if (trimmed && !trimmed.startsWith('#') && currentName) {
-            currentCmd = trimmed;
-            const id = `channel_${currentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`;
+        if (line.startsWith('#EXTINF')) {
+            const match = line.match(/,(.+)/);
+            currentName = match ? match[1].trim() : '';
+        } else if (line.trim() && !line.startsWith('#') && currentName) {
             metas.push({
-                id,
+                id: makeChannelId(currentName),
                 type: 'tv',
                 name: currentName,
-                poster: 'https://via.placeholder.com/300x450/222/fff?text=' + encodeURIComponent(currentName.substring(0, 15)),
+                poster: `https://via.placeholder.com/300x450/222/fff?text=${encodeURIComponent(currentName.slice(0, 15))}`,
                 description: 'Canal IPTV via Stalker',
-                genres: ['IPTV'],
-                runtime: 'N/A'
+                genres: ['IPTV']
             });
-            console.log('[DEBUG] Canal adicionado:', currentName, 'ID:', id, 'Cmd:', currentCmd);
             currentName = '';
         }
     }
 
-    console.log('[DEBUG] Total canais encontrados:', metas.length);
     return metas;
 }
 
-// Manifest
+/* =========================
+   MANIFEST
+========================= */
+
 const manifest = {
-    id: "org.xulovski.stalker-iptv",
-    version: "1.0.10",
-    name: "Stalker IPTV (MAC)",
-    description: "Canais IPTV via portal Stalker/MAG",
-    resources: ["catalog", "stream", "meta"],
-    types: ["tv"],
+    id: 'org.xulovski.stalker-iptv',
+    version: '1.0.11',
+    name: 'Stalker IPTV (MAC)',
+    description: 'Canais IPTV via portal Stalker/MAG',
+    resources: ['catalog', 'stream', 'meta'],
+    types: ['tv'],
     catalogs: [{
-        type: "tv",
-        id: "stalker_catalog",
-        name: "Canais IPTV",
-        extra: [{ name: "genre", isRequired: false, options: ["Todos"] }]
+        type: 'tv',
+        id: 'stalker_catalog',
+        name: 'Canais IPTV'
     }],
     behaviorHints: {
         configurable: true,
         reloadRequired: true,
-        configurationURL: "/configure"
+        configurationURL: '/configure'
     }
 };
 
@@ -125,198 +139,128 @@ builder.defineCatalogHandler(catalogHandler);
 builder.defineStreamHandler(streamHandler);
 builder.defineMetaHandler(metaHandler);
 
-const addonInterface = builder.getInterface();
-const addonRouter = getRouter(addonInterface);
-app.use(addonRouter);
+app.use(getRouter(builder.getInterface()));
 
-// Rota custom /configure (form bonito no browser)
+/* =========================
+   CONFIGURE PAGE
+========================= */
+
 app.get('/configure', (req, res) => {
     res.send(`
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-  <meta charset="utf-8">
-  <title>Configurar Stalker IPTV</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 400px; margin: 50px auto; padding: 20px; background: #f4f4f4; }
-    h1 { text-align: center; color: #333; }
-    label { display: block; margin: 15px 0 5px; font-weight: bold; }
-    input { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
-    button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; margin-top: 10px; }
-    button:hover { background: #0056b3; }
-    #status { margin-top: 20px; text-align: center; color: #555; }
-  </style>
+<meta charset="utf-8">
+<title>Configurar Stalker IPTV</title>
+<style>
+body{font-family:Arial;max-width:400px;margin:40px auto;background:#f4f4f4;padding:20px}
+input,button{width:100%;padding:10px;margin:10px 0}
+button{background:#007bff;color:#fff;border:none}
+</style>
 </head>
 <body>
-  <h1>Configurar Stalker IPTV</h1>
-  <form id="form">
-    <label>Nome da Lista</label>
-    <input type="text" id="nome_lista" placeholder="Ex: Minha Lista Família" required value="Minha Lista IPTV">
-
-    <label>URL do Servidor / Portal</label>
-    <input type="text" id="stalker_portal" placeholder="http://seu-servidor.com:8080/c/" required>
-
-    <label>MAC Address</label>
-    <input type="text" id="stalker_mac" placeholder="00:1A:79:XX:XX:XX" required pattern="[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}">
-
-    <button type="submit">Salvar e Abrir Stremio</button>
-  </form>
-
-  <div id="status"></div>
-
-  <script>
-    document.getElementById('form').addEventListener('submit', function(e) {
-      e.preventDefault();
-      const nome = document.getElementById('nome_lista').value.trim() || 'Minha Lista';
-      const portal = document.getElementById('stalker_portal').value.trim();
-      const mac = document.getElementById('stalker_mac').value.trim().toUpperCase();
-
-      if (!portal || !mac) {
-        alert('Preencha URL do servidor e MAC!');
-        return;
-      }
-
-      const params = new URLSearchParams({
-        nome_lista: nome,
-        stalker_portal: portal,
-        stalker_mac: mac
-      });
-
-      const manifestUrl = window.location.origin + '/manifest.json?' + params.toString();
-
-      window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
-
-      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Clique em "Instalar" se necessário.<br>Após instalar, recarregue o catálogo para ver os canais reais.';
-    });
-  </script>
+<h2>Configurar IPTV</h2>
+<input id="nome" placeholder="Nome da Lista">
+<input id="portal" placeholder="http://servidor/c/">
+<input id="mac" placeholder="00:1A:79:XX:XX:XX">
+<button onclick="go()">Salvar e abrir Stremio</button>
+<script>
+function go(){
+ const p=new URLSearchParams({
+  nome_lista:nome.value,
+  stalker_portal:portal.value,
+  stalker_mac:mac.value.toUpperCase()
+ });
+ location.href='stremio://'+encodeURIComponent(location.origin+'/manifest.json?'+p);
+}
+</script>
 </body>
 </html>
-    `);
+`);
 });
 
-// Catalog Handler - lê params da query se userData vazio
+/* =========================
+   CATALOG
+========================= */
+
 async function catalogHandler(args) {
-    const { type, id, extra = {}, config = {}, userData = {} } = args || {};
+    const { userData = {}, config = {}, extra = {} } = args || {};
 
-    console.log('[CATALOG DEBUG] Args completo:', JSON.stringify(args, null, 2));
-    console.log('[CATALOG DEBUG] UserData:', JSON.stringify(userData, null, 2));
-    console.log('[CATALOG DEBUG] Extra (fallback):', JSON.stringify(extra, null, 2));
+    let data =
+        Object.keys(userData).length ? userData :
+        Object.keys(config).length ? config :
+        Object.keys(extra).length ? extra : {};
 
-    let effectiveData = Object.keys(userData).length > 0 ? userData : config;
-
-    // Fallback para extra (o Stremio passa params da query em extra em alguns casos)
-    if (Object.keys(effectiveData).length === 0 && extra && Object.keys(extra).length > 0) {
-        effectiveData = extra;
-        console.log('[CATALOG] Usando fallback extra como config:', JSON.stringify(extra, null, 2));
-    }
-
-    if (Object.keys(effectiveData).length === 0) {
-        console.warn('[CATALOG] Nenhuma configuração encontrada - configure via /configure');
-        return { metas: [{ 
-            id: 'config-required',
+    if (!Object.keys(data).length) {
+        return { metas: [{
+            id: 'config',
             type: 'tv',
-            name: 'Configure o addon para ver os canais reais',
-            description: 'Acesse /configure no browser, preencha portal e MAC, clique "Salvar e Abrir Stremio", instale o addon e recarregue o catálogo.',
-            poster: 'https://via.placeholder.com/300x450/444/fff?text=Configurar+Agora',
-            genres: ['Ação']
-        }] };
+            name: 'Configure o addon em /configure',
+            poster: 'https://via.placeholder.com/300x450/444/fff?text=Configurar'
+        }]};
     }
 
-    const sessionKey = getSessionKey(effectiveData);
+    const sessionKey = getSessionKey(data);
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
 
     if (!fs.existsSync(m3uPath) || fs.statSync(m3uPath).size < 100) {
-        try {
-            console.log('[CATALOG] M3U não encontrado ou vazio → a gerar via Python...');
-            await generateStalkerM3U(effectiveData, sessionKey);
-            console.log('[CATALOG] Geração Python concluída');
-        } catch (err) {
-            console.error('[CATALOG ERROR] Falha ao gerar M3U:', err.message);
-            return { metas: [], error: 'Falha ao carregar canais do portal' };
-        }
+        await generateStalkerM3U(data, sessionKey);
     }
 
-    const metas = getChannelsFromM3U(sessionKey);
-    console.log('[CATALOG] Total de canais encontrados:', metas.length);
-    return { metas };
+    return { metas: getChannelsFromM3U(sessionKey) };
 }
 
-// Stream Handler
+/* =========================
+   STREAM
+========================= */
+
 async function streamHandler(args) {
-    const { type, id, config = {}, userData = {} } = args || {};
+    const { id, userData = {}, config = {} } = args || {};
+    const data = Object.keys(userData).length ? userData : config;
 
-    console.log('[STREAM DEBUG] Args completo:', JSON.stringify(args, null, 2));
-    console.log('[STREAM DEBUG] UserData:', JSON.stringify(userData, null, 2));
+    if (!Object.keys(data).length) return { streams: [] };
 
-    const effectiveData = Object.keys(userData).length > 0 ? userData : config;
-
-    if (type !== 'tv') return { streams: [] };
-
-    if (Object.keys(effectiveData).length === 0) {
-        console.warn('[STREAM] Nenhuma configuração encontrada');
-        return { streams: [] };
-    }
-
-    const sessionKey = getSessionKey(effectiveData);
+    const sessionKey = getSessionKey(data);
     const m3uPath = path.join(CACHE_DIR, `${sessionKey}_m3u.m3u`);
-
     if (!fs.existsSync(m3uPath)) return { streams: [] };
 
-    const content = fs.readFileSync(m3uPath, 'utf8');
-    const lines = content.split('\n');
-    let foundUrl = '';
-    let currentName = '';
+    const lines = fs.readFileSync(m3uPath, 'utf8').split('\n');
 
+    let name = '';
     for (const line of lines) {
         if (line.startsWith('#EXTINF')) {
-            const match = line.match(/,(.+)/);
-            currentName = match ? match[1].trim() : '';
-        } else if (line.trim() && !line.startsWith('#') && currentName) {
-            const cleanId = `channel_${currentName.replace(/\s+/g, '_').toLowerCase()}`;
-            if (cleanId === id) {
-                foundUrl = line.trim();
-                break;
+            const m = line.match(/,(.+)/);
+            name = m ? m[1].trim() : '';
+        } else if (line.trim() && !line.startsWith('#') && name) {
+            if (makeChannelId(name) === id) {
+                return { streams: [{ url: line.trim(), title: name }] };
             }
-            currentName = '';
+            name = '';
         }
     }
 
-    if (!foundUrl) return { streams: [] };
-
-    return {
-        streams: [{
-            url: foundUrl,
-            title: 'Stream Direto (Stalker)',
-            behaviorHints: { notWebReady: false }
-        }]
-    };
+    return { streams: [] };
 }
 
-// Meta Handler
+/* =========================
+   META
+========================= */
+
 async function metaHandler(args) {
-    const { type, id, config = {}, userData = {} } = args || {};
+    const { id, userData = {}, config = {} } = args || {};
+    const data = Object.keys(userData).length ? userData : config;
+    if (!Object.keys(data).length) return { meta: null };
 
-    console.log('[META DEBUG] Args completo:', JSON.stringify(args, null, 2));
-    console.log('[META DEBUG] UserData:', JSON.stringify(userData, null, 2));
-
-    const effectiveData = Object.keys(userData).length > 0 ? userData : config;
-
-    if (type !== 'tv') return { meta: null };
-
-    if (Object.keys(effectiveData).length === 0) {
-        console.warn('[META] Nenhuma configuração encontrada');
-        return { meta: null };
-    }
-
-    const sessionKey = getSessionKey(effectiveData);
-    const metas = getChannelsFromM3U(sessionKey);
-    const meta = metas.find(m => m.id === id);
-
+    const sessionKey = getSessionKey(data);
+    const meta = getChannelsFromM3U(sessionKey).find(m => m.id === id);
     return { meta: meta || null };
 }
 
-// Inicia o servidor
-const port = process.env.PORT || 3000;
-app.listen(port, '0.0.0.0', () => {
-    console.log(`Addon rodando em http://0.0.0.0:${port}`);
+/* =========================
+   START
+========================= */
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+    console.log('Addon ativo na porta', PORT);
 });
