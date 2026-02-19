@@ -236,6 +236,7 @@ async function catalogHandler(args) {
     }
 
     const metas = getChannelsFromM3U(sessionKey);
+    console.log('[DEBUG] Canais gerados no M3U:', metas.map(m => m.name).join(', '));
     console.log('[CATALOG] Total de canais encontrados:', metas.length);
     return { metas };
 }
