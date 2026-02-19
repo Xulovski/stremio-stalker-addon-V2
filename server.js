@@ -186,7 +186,7 @@ app.get('/configure', (req, res) => {
 
       window.location.href = 'stremio://' + encodeURIComponent(manifestUrl);
 
-      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Clique em "Instalar" se necessário.<br>Após instalar, recarregue o catálogo para ver os canais.';
+      document.getElementById('status').innerHTML = 'Stremio aberto!<br>Clique em "Instalar" se necessário.<br>Após instalar, recarregue o catálogo para ver os canais reais.';
     });
   </script>
 </body>
@@ -204,7 +204,7 @@ async function catalogHandler(args) {
 
     let effectiveData = Object.keys(userData).length > 0 ? userData : config;
 
-    // Fallback para extra (params da query chegam aqui em alguns casos)
+    // Fallback para extra (o Stremio passa params da query em extra em alguns casos)
     if (Object.keys(effectiveData).length === 0 && extra && Object.keys(extra).length > 0) {
         effectiveData = extra;
         console.log('[CATALOG] Usando fallback extra como config:', JSON.stringify(extra, null, 2));
@@ -215,8 +215,8 @@ async function catalogHandler(args) {
         return { metas: [{ 
             id: 'config-required',
             type: 'tv',
-            name: 'Configure o addon para ver os canais',
-            description: 'Acesse /configure no browser para adicionar portal e MAC. Depois recarregue o catálogo.',
+            name: 'Configure o addon para ver os canais reais',
+            description: 'Acesse /configure no browser, preencha portal e MAC, clique "Salvar e Abrir Stremio", instale o addon e recarregue o catálogo.',
             poster: 'https://via.placeholder.com/300x450/444/fff?text=Configurar+Agora',
             genres: ['Ação']
         }] };
