@@ -150,8 +150,10 @@ app.get('/configure', (req, res) => {
 <html lang="pt">
 <body style="font-family:Arial;max-width:400px;margin:40px auto">
 <h2>Configurar Stalker IPTV</h2>
-<input id="portal" placeholder="URL do Portal"><br><br>
-<input id="mac" placeholder="MAC Address"><br><br>
+<label>URL do Portal:</label><br>
+<input id="portal" placeholder="http://seu-portal.com:8080/c/"><br><br>
+<label>MAC Address:</label><br>
+<input id="mac" placeholder="00:1A:79:XX:XX:XX"><br><br>
 <button onclick="save()">Salvar e abrir Stremio</button>
 <script>
 async function save(){
@@ -159,8 +161,8 @@ async function save(){
   method:'POST',
   headers:{'Content-Type':'application/json'},
   body:JSON.stringify({
-    stalker_portal: portal.value,
-    stalker_mac: mac.value.toUpperCase()
+    stalker_portal: document.getElementById('portal').value,
+    stalker_mac: document.getElementById('mac').value.toUpperCase()
   })
  });
  const j = await res.json();

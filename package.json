@@ -1,18 +1,13 @@
 {
-  "name": "stremio-stalker-addon-v2",
-  "version": "1.0.0",
-  "description": "Stremio addon para portais Stalker/MAG",
+  "name": "stremio-stalker-addon",
+  "version": "1.0.20",
   "main": "server.cjs",
   "scripts": {
     "start": "node server.cjs"
   },
   "dependencies": {
-    "express": "^4.22.1",
-    "cors": "^2.8.6",
-    "cookie-parser": "^1.4.7",
+    "express": "^4.19.2",
+    "cors": "^2.8.5",
     "stremio-addon-sdk": "^1.6.10"
-  },
-  "engines": {
-    "node": ">=18"
   }
 }
